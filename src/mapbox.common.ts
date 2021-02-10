@@ -580,13 +580,15 @@ export interface MapboxApi {
 
   animateCamera(options: AnimateCameraOptions, nativeMap?: any): Promise<any>;
 
-  setOnMapClickListener(listener: (data: LatLng) => void, nativeMap?): Promise<any>;
+  setOnMapClickListener(listener: (data: LatLng) => boolean, nativeMap?): Promise<any>;
 
-  setOnMapLongClickListener(listener: (data: LatLng) => void, nativeMap?): Promise<any>;
+  setOnMapLongClickListener(listener: (data: LatLng) => boolean, nativeMap?): Promise<any>;
 
   setOnScrollListener(listener: (data?: LatLng) => void, nativeMap?: any): Promise<void>;
 
   setOnMoveBeginListener(listener: (data?: LatLng) => void, nativeMap?: any): Promise<void>;
+
+  setOnMoveEndListener(listener: (data?: LatLng) => void, nativeMap?: any): Promise<void>;
 
   setOnFlingListener(listener: () => void, nativeMap?: any): Promise<any>;
 
@@ -699,13 +701,15 @@ export interface MapboxViewApi {
 
   queryRenderedFeatures(options: QueryRenderedFeaturesOptions): Promise<Array<Feature>>;
 
-  setOnMapClickListener(listener: (data: LatLng) => void): Promise<any>;
+  setOnMapClickListener(listener: (data: LatLng) => boolean): Promise<any>;
 
-  setOnMapLongClickListener(listener: (data: LatLng) => void): Promise<any>;
+  setOnMapLongClickListener(listener: (data: LatLng) => boolean): Promise<any>;
 
   setOnScrollListener(listener: (data?: LatLng) => void): Promise<void>;
 
   setOnMoveBeginListener(listener: (data?: LatLng) => void): Promise<void>;
+
+  setOnMoveEndListener(listener: (data?: LatLng) => void): Promise<void>;
 
   setOnFlingListener(listener: () => void): Promise<any>;
 
@@ -841,13 +845,13 @@ export abstract class MapboxViewCommonBase extends ContentView implements Mapbox
 
   // -----------------------------------------------------------------
 
-  setOnMapClickListener(listener: (data: LatLng) => void): Promise<any> {
+  setOnMapClickListener(listener: (data: LatLng) => boolean): Promise<any> {
     return this.mapbox.setOnMapClickListener(listener, this.getNativeMapView());
   }
 
   // -----------------------------------------------------------------
 
-  setOnMapLongClickListener(listener: (data: LatLng) => void): Promise<any> {
+  setOnMapLongClickListener(listener: (data: LatLng) => boolean): Promise<any> {
     return this.mapbox.setOnMapLongClickListener(listener, this.getNativeMapView());
   }
 
@@ -861,6 +865,12 @@ export abstract class MapboxViewCommonBase extends ContentView implements Mapbox
 
   setOnMoveBeginListener(listener: (data?: LatLng) => void, nativeMap?: any): Promise<void> {
     return this.mapbox.setOnMoveBeginListener(listener, this.getNativeMapView());
+  }
+
+  // -----------------------------------------------------------------
+
+  setOnMoveEndListener(listener: (data?: LatLng) => void, nativeMap?: any): Promise<void> {
+    return this.mapbox.setOnMoveEndListener(listener, this.getNativeMapView());
   }
 
   // -----------------------------------------------------------------
@@ -1199,6 +1209,7 @@ export abstract class MapboxViewBase extends MapboxViewCommonBase {
   public static mapReadyEvent: string = "mapReady";
   public static scrollEvent: string = "scrollEvent";
   public static moveBeginEvent: string = "moveBeginEvent";
+  public static moveEndEvent: string = "moveEndEvent";
 
   public static locationPermissionGrantedEvent: string = "locationPermissionGranted";
   public static locationPermissionDeniedEvent: string = "locationPermissionDenied";

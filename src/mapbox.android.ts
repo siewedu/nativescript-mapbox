@@ -506,6 +506,20 @@ export class MapboxView extends MapboxViewBase {
             android: this.nativeMapView
           });
 
+        },
+
+        onMoveEndEvent: ( event ) => {
+
+          console.log( "MapboxView::initMap(): onMoveEndEvent event" );
+
+          this.notify({
+            eventName: MapboxViewBase.moveEndEvent,
+            object: this,
+            event: event,
+            map: this,
+            android: this.nativeMapView
+          });
+
         }
 
       };  // end of options
@@ -1355,6 +1369,16 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
 
       if ( typeof settings.onMoveBeginEvent != 'undefined' ) {
         settings.onMoveBeginEvent( point );
+      }
+
+    }, mapboxNativeViewInstance );
+
+    this.setOnMoveEndListener( ( point: LatLng ) => {
+
+      console.log( "Mapbox:initEventHandlerShim(): moveEnd:", point );
+
+      if ( typeof settings.onMoveEndEvent != 'undefined' ) {
+        settings.onMoveEndEvent( point );
       }
 
     }, mapboxNativeViewInstance );
@@ -2387,7 +2411,7 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
   * Not returning a boolean from the listener function will cause a crash.
   */
 
-  setOnMapClickListener( listener: (data: LatLng) => void, nativeMap? : MapboxView ): Promise<any> {
+  setOnMapClickListener( listener: (data: LatLng) => boolean, nativeMap? : MapboxView ): Promise<any> {
     return new Promise((resolve, reject) => {
       try {
 
@@ -2491,6 +2515,45 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
       }
     });
   }
+
+    // ----------------------------------------------------------------------------------
+
+    setOnMoveEndListener(listener: (data?: LatLng) => void, nativeMap?): Promise<void> {
+      return new Promise((resolve, reject) => {
+        try {
+  
+          if (! this._mapboxMapInstance ) {
+            reject("No map has been loaded");
+            return;
+          }
+  
+          console.log( "Mapbox::setOnMoveEndListener():" );
+  
+          this.onMoveListener = new com.mapbox.mapboxsdk.maps.MapboxMap.OnMoveListener({
+            onMoveBegin: (detector: any /* MoveGestureDetector */) => {
+            },
+            onMove: (detector: any /* MoveGestureDetector */) => {
+            },
+            onMoveEnd: (detector: any /* MoveGestureDetector */) => {
+              const coordinate = this._mapboxMapInstance.getCameraPosition().target;
+              return listener({
+                lat: coordinate.getLatitude(),
+                lng: coordinate.getLongitude()
+              });
+            }
+          });
+  
+          this._mapboxMapInstance.addOnMoveListener( this.onMoveListener );
+  
+          this.gcFix( 'com.mapbox.mapboxsdk.maps.MapboxMap.OnMoveListener', this.onMoveListener );
+  
+          resolve();
+        } catch (ex) {
+          console.log("Error in mapbox.setOnMoveEndListener: " + ex);
+          reject(ex);
+        }
+      });
+    }
 
   // ----------------------------------------------------------------------------------
 
@@ -2955,98 +3018,59 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
   * @link https://docs.mapbox.com/mapbox-gl-js/api/#map#addsource
   */
 
-  addSource( id : string, options: AddSourceOptions, nativeMap?): Promise<any> {
-    return new Promise((resolve, reject) => {
+ addSource(id: string, options: AddSourceOptions, nativeMap?): Promise<void> {
+  return new Promise((resolve, reject) => {
       try {
-        const { url, type } = options;
-        const theMap = nativeMap;
-        let source;
+          const theMap = nativeMap || this._mapboxMapInstance;
+          let source;
 
-        if (!theMap) {
-          reject("No map has been loaded");
-          return;
-        }
+          if (!theMap) {
+              reject('No map has been loaded');
+              return;
+          }
 
-        if ( theMap.mapboxMap.getSource(id) ) {
-          reject("Source exists: " + id);
-          return;
-        }
+          if (theMap.getStyle().getSource(id)) {
+              reject('Source exists: ' + id);
+              return;
+          }
 
-        switch (type) {
+          switch (options.type) {
+              case 'vector':
+                  source = new com.mapbox.mapboxsdk.style.sources.VectorSource(id, options.url);
+                  break;
 
-          case "vector":
-            source = new com.mapbox.mapboxsdk.style.sources.VectorSource(id, url);
-          break;
+              case 'geojson':
+                  console.log('Mapbox:addSource(): before addSource with geojson');
+                  console.log('Mapbox:addSource(): before adding geoJSON to GeoJsonSource');
+                  
 
-          case 'geojson':
+                  const geoJsonSource = new com.mapbox.mapboxsdk.style.sources.GeoJsonSource(id);
+                  const geoJsonString = JSON.stringify(options.data);
+                  geoJsonSource.setGeoJson(geoJsonString);
+                  source = geoJsonSource;
 
-            console.log( "Mapbox:addSource(): before addSource with geojson" );
+                  break;
 
-            let geojsonString = JSON.stringify( options.data );
+              default:
+                  reject('Invalid source type: ' + options['type']);
+                  return;
+          }
 
-            let feature : Feature = com.mapbox.geojson.Feature.fromJson( geojsonString );
+          if (!source) {
+              const ex = 'No source to add';
+              console.log('Error in mapbox.addSource: ' + ex);
+              reject(ex);
+              return;
+          }
 
-            console.log( "Mapbox:addSource(): adding feature" );
-
-            // com.mapbox.mapboxsdk.maps.Style
-
-            let geoJsonSource = new com.mapbox.mapboxsdk.style.sources.GeoJsonSource(
-              id,
-              feature
-            );
-
-            this._mapboxMapInstance.getStyle().addSource( geoJsonSource );
-
-            this.gcFix( 'com.mapbox.mapboxsdk.style.sources.GeoJsonSource', geoJsonSource );
-
-            // To support handling click events on lines and circles, we keep the underlying 
-            // feature.
-            //
-            // FIXME: There should be a way to get the original feature back out from the source
-            // but I have not yet figured out how.
-
-            if ( options.data.geometry.type == 'LineString' ) {
-
-              this.lines.push({
-                type: 'line',
-                id: id,
-                feature: feature
-              });
-
-            } else if ( options.data.geometry.type == 'Point' ) {
-
-              // probably a circle
-
-              this.circles.push({
-                type: 'line',
-                id: id,
-                center: options.data.geometry.coordinates
-              });
-
-            }
-
-          break;
-
-          default:
-            reject("Invalid source type: " + type);
-            return;
-        }
-
-        if (!source) {
-          const ex = "No source to add";
-          console.log("Error in mapbox.addSource: " + ex);
-          reject(ex);
-          return;
-        }
-
-        theMap.mapboxMap.addSource(source);
-        resolve();
+          theMap.getStyle().addSource(source);
+          resolve();
       } catch (ex) {
-        console.log("Error in mapbox.addSource: " + ex);
-        reject(ex);
+          console.log('Error in mapbox.addSource: ' + ex);
+          reject(ex);
       }
-    });
-  }
+  });
+}
 
   // -------------------------------------------------------------------------------------
 
@@ -3054,41 +3078,27 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
   * remove source by id
   */
 
-  removeSource( id: string, nativeMap? ): Promise<any> {
-    return new Promise((resolve, reject) => {
+ removeSource(id: string, nativeMap?): Promise<void> {
+  return new Promise((resolve, reject) => {
       try {
-        const theMap = nativeMap;
+          const theMap = nativeMap || this._mapboxMapInstance;
 
-        if (!theMap) {
-          reject("No map has been loaded");
-          return;
-        }
+          if (!theMap) {
+              reject('No map has been loaded');
+              return;
+          }
 
-        theMap.mapboxMap.removeSource(id);
+          const isRemoved = theMap.getStyle().removeSource(id);
+          if (!isRemoved) {
+              reject(`Could not remove source with id: ${id}`)
+          }
 
-        // if we've cached the underlying feature, remove it.
-        //
-        // since we don't know if it's a line or a circle we have to check both lists.
-
-        let offset = this.lines.findIndex( ( entry ) => { return entry.id == id; });
-
-        if ( offset != -1 ) {
-          this.lines.splice( offset, 1 );
-        }
-
-        offset = this.circles.findIndex( ( entry ) => { return entry.id == id; });
-
-        if ( offset != -1 ) {
-          this.circles.splice( offset, 1 );
-        }
-
-        resolve();
+          resolve();
       } catch (ex) {
-        console.log("Error in mapbox.removeSource: " + ex);
-        reject(ex);
+          console.log('Error in mapbox.removeSource: ' + ex);
       }
-    });
-  }
+  });
+}
 
   // -------------------------------------------------------------------------------------
 
@@ -3151,7 +3161,6 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
 
     return new Promise((resolve, reject) => {
       try {
-
         this._mapboxMapInstance.getStyle().removeLayer( id ) ;
 
         console.log( "Mapbox:removeLayer(): after removing layer" );

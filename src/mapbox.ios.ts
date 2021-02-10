@@ -378,6 +378,19 @@ export class MapboxView extends MapboxViewBase {
 
         }, this.nativeMapView );
 
+        this.mapbox.setOnMoveEndListener( (data?: LatLng) => {
+
+          console.log( "MapboxView::initMap(): onMoveEnd listener" );
+
+          this.notify({
+            eventName: MapboxViewBase.moveEndEvent,
+            object: this,
+            map: this,
+            ios: this.nativeMapView
+          });
+
+        }, this.nativeMapView );
+
       };
 
       // draw the map after a timeout
@@ -1795,6 +1808,11 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
     });
   }
 
+  setOnMoveEndListener(listener: () => void, nativeMap?: any): Promise<any> {
+    // there's no swipe event we can bind to
+    return Promise.reject("'setOnMoveEndListener' is not supported on iOS");
+  }
+  
   setOnFlingListener(listener: () => void, nativeMap?: any): Promise<any> {
     // there's no swipe event we can bind to
     return Promise.reject("'setOnFlingListener' is not supported on iOS");
@@ -2670,7 +2688,7 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
           reject( "Non circle style passed to addCircleLayer()" );
         }
 
-        if ( typeof style.source != 'undefined' ) {
+        if ( typeof style.source == 'undefined' ) {
           reject( "Missing source." );
         }
 
@@ -2731,7 +2749,7 @@ export class Mapbox extends MapboxCommon implements MapboxApi {
         let opacity = 1;
 
         if ( style.paint && style.paint[ 'circle-opacity' ] ) {
-          opacity = style.paint[ 'circe-opacity' ];
+          opacity = style.paint[ 'circle-opacity' ];
         }
 
         layer.circleOpacity = NSExpression.expressionForConstantValue( opacity );
